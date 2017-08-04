@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Threading;
+using System.Linq;
+using System.Threading.Tasks;
 using Shadowsocks.Encryption;
 using Shadowsocks.Encryption.Stream;
 using Xunit;
@@ -9,16 +9,14 @@ namespace test
 {
     public class EncryptionTest
     {
-        private static bool encryptionFailed = false;
-
         [Fact]
         public void TestMD5()
         {
+            var random = new Random();
             for (int len = 1; len < 64; len++)
             {
                 System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
                 byte[] bytes = new byte[len];
-                var random = new Random();
                 random.NextBytes(bytes);
                 string md5str = Convert.ToBase64String(md5.ComputeHash(bytes));
                 string md5str2 = Convert.ToBase64String(MbedTLS.MD5(bytes));
@@ -27,124 +25,66 @@ namespace test
         }
 
         [Fact]
-        public void TestMbedTLSEncryption()
+        public Task TestMbedTLSEncryption()
         {
-            // run it once before the multi-threading test to initialize global tables
-            RunSingleMbedTLSEncryptionThread();
-            List<Thread> threads = new List<Thread>();
-            for (int i = 0; i < 10; i++)
-            {
-                Thread t = new Thread(new ThreadStart(RunSingleMbedTLSEncryptionThread));
-                threads.Add(t);
-                t.Start();
-            }
-            foreach (Thread t in threads)
-            {
-                t.Join();
-            }
-            RNG.Close();
-            Assert.False(encryptionFailed);
+            return RunParallelEncryptionTest(RunSingleMbedTLSEncryptionThread);
         }
 
         [Fact]
-        public void TestRC4Encryption()
+        public Task TestRC4Encryption()
         {
-            // run it once before the multi-threading test to initialize global tables
-            RunSingleRC4EncryptionThread();
-            List<Thread> threads = new List<Thread>();
-            for (int i = 0; i < 10; i++)
-            {
-                Thread t = new Thread(new ThreadStart(RunSingleRC4EncryptionThread));
-                threads.Add(t);
-                t.Start();
-            }
-            foreach (Thread t in threads)
-            {
-                t.Join();
-            }
-            RNG.Close();
-            Assert.False(encryptionFailed);
+            return RunParallelEncryptionTest(RunSingleRC4EncryptionThread);
         }
 
         [Fact]
-        public void TestSodiumEncryption()
+        public Task TestSodiumEncryption()
+        {
+            return RunParallelEncryptionTest(RunSingleSodiumEncryptionThread);
+        }
+
+        public async Task RunParallelEncryptionTest(Action encryptionAction)
         {
             // run it once before the multi-threading test to initialize global tables
-            RunSingleSodiumEncryptionThread();
-            List<Thread> threads = new List<Thread>();
-            for (int i = 0; i < 10; i++)
-            {
-                Thread t = new Thread(new ThreadStart(RunSingleSodiumEncryptionThread));
-                threads.Add(t);
-                t.Start();
-            }
-            foreach (Thread t in threads)
-            {
-                t.Join();
-            }
+            encryptionAction();
+            await GenerateParallelRunningEncryptionTask(encryptionAction, 10);
             RNG.Close();
-            Assert.False(encryptionFailed);
+        }
+
+        private Task GenerateParallelRunningEncryptionTask(Action action, int parallelNumber)
+        {
+            return Task.WhenAll(Enumerable.Repeat(1, parallelNumber).Select(_ => Task.Run(action)));
         }
 
         private void RunSingleSodiumEncryptionThread()
         {
-            try
-            {
-                for (int i = 0; i < 100; i++)
-                {
-                    IEncryptor encryptor;
-                    IEncryptor decryptor;
-                    encryptor = new StreamSodiumEncryptor("salsa20", "barfoo!");
-                    decryptor = new StreamSodiumEncryptor("salsa20", "barfoo!");
-                    RunEncryptionRound(encryptor, decryptor);
-                }
-            }
-            catch
-            {
-                encryptionFailed = true;
-                throw;
-            }
+            var method = "salsa20";
+            var password = "barfool!";
+            IEncryptor encryptor = new StreamSodiumEncryptor(method, password);
+            IEncryptor decryptor = new StreamSodiumEncryptor(method, password);
+            RunEncryptionTest(encryptor, decryptor);
         }
 
         private void RunSingleMbedTLSEncryptionThread()
         {
-            try
-            {
-                for (int i = 0; i < 100; i++)
-                {
-                    IEncryptor encryptor;
-                    IEncryptor decryptor;
-                    encryptor = new StreamMbedTLSEncryptor("aes-256-cfb", "barfoo!");
-                    decryptor = new StreamMbedTLSEncryptor("aes-256-cfb", "barfoo!");
-                    RunEncryptionRound(encryptor, decryptor);
-                }
-            }
-            catch
-            {
-                encryptionFailed = true;
-                throw;
-            }
+            var method = "aes-256-cfb";
+            var password = "barfoo!";
+            IEncryptor encryptor = new StreamMbedTLSEncryptor(method, password);
+            IEncryptor decryptor = new StreamMbedTLSEncryptor(method, password);
+            RunEncryptionTest(encryptor, decryptor);
         }
 
         private void RunSingleRC4EncryptionThread()
         {
-            try
-            {
-                for (int i = 0; i < 100; i++)
-                {
-                    var random = new Random();
-                    IEncryptor encryptor;
-                    IEncryptor decryptor;
-                    encryptor = new StreamMbedTLSEncryptor("rc4-md5", "barfoo!");
-                    decryptor = new StreamMbedTLSEncryptor("rc4-md5", "barfoo!");
-                    RunEncryptionRound(encryptor, decryptor);
-                }
-            }
-            catch
-            {
-                encryptionFailed = true;
-                throw;
-            }
+            var method = "rc4-md5";
+            var password = "barfoo!";
+            IEncryptor encryptor = new StreamMbedTLSEncryptor(method, password);
+            IEncryptor decryptor = new StreamMbedTLSEncryptor(method, password);
+            RunEncryptionTest(encryptor, decryptor);
+        }
+
+        private void RunEncryptionTest(IEncryptor encryptor, IEncryptor decryptor)
+        {
+            RunEncryptionRound(encryptor, decryptor);
         }
 
         private void RunEncryptionRound(IEncryptor encryptor, IEncryptor decryptor)
@@ -171,14 +111,6 @@ namespace test
             {
                 Assert.Equal(plain[j], plain2[j]);
             }
-            encryptor.Encrypt(plain, 12333, cipher, out outLen);
-            decryptor.Decrypt(cipher, outLen, plain2, out outLen2);
-            Assert.Equal(12333, outLen2);
-            for (int j = 0; j < outLen2; j++)
-            {
-                Assert.Equal(plain[j], plain2[j]);
-            }
         }
-
     }
 }
