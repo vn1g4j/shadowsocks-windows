@@ -14,7 +14,7 @@ namespace Shadowsocks.Controller
             _targetPort = targetPort;
         }
 
-        public override bool Handle(byte[] firstPacket, int length, Socket socket, object state)
+        public override bool Handle(byte[] firstPacket, int length, SocketProxy socket, object state)
         {
             if (socket.ProtocolType != ProtocolType.Tcp)
             {

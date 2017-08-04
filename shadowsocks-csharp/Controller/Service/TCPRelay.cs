@@ -31,7 +31,7 @@ namespace Shadowsocks.Controller
             _lastSweepTime = DateTime.Now;
         }
 
-        public override bool Handle(byte[] firstPacket, int length, Socket socket, object state)
+        public override bool Handle(byte[] firstPacket, int length, SocketProxy socket, object state)
         {
             if (socket.ProtocolType != ProtocolType.Tcp
                 || (length < 2 || firstPacket[0] != 5))

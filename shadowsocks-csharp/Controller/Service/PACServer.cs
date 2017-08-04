@@ -9,6 +9,7 @@ using Shadowsocks.Encryption;
 using Shadowsocks.Model;
 using Shadowsocks.Properties;
 using Shadowsocks.Util;
+using Shadowsocks.Util.Sockets;
 
 namespace Shadowsocks.Controller
 {
@@ -59,7 +60,7 @@ namespace Shadowsocks.Controller
             return value.ToString("yyyyMMddHHmmssfff");
         }
 
-        public override bool Handle(byte[] firstPacket, int length, Socket socket, object state)
+        public override bool Handle(byte[] firstPacket, int length, SocketProxy socket, object state)
         {
             if (socket.ProtocolType != ProtocolType.Tcp)
             {
