@@ -5,6 +5,7 @@ using System.Net;
 using System.Text;
 using Shadowsocks.Encryption.CircularBuffer;
 using Shadowsocks.Controller;
+using Shadowsocks.Controller.Service;
 using Shadowsocks.Encryption.Exception;
 using Shadowsocks.Encryption.Stream;
 

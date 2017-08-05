@@ -1,6 +1,7 @@
 ﻿using System.Net.Sockets;
 using Moq;
 using Shadowsocks.Controller;
+using Shadowsocks.Controller.Service;
 using Shadowsocks.Util.Sockets;
 using Xunit;
 
