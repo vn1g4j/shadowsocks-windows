@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Sockets;
 using Moq;
 using Shadowsocks.Controller;
@@ -48,6 +50,30 @@ namespace test
             tcpRelay.Handlers.Add(timeoutHandlerMock.Object);
             tcpRelay.Handle(FirstPacket, FirstPacket.Length, socketMoq.Object, null);
             VerifyProperlyHandleTimeoutHandlers(timeoutHandlerMock, tcpHandlerMock);
+        }
+
+        [Fact]
+        public void close_all_handlers_when_stop_relay()
+        {
+            var tcpRelay = new TCPRelay(null, null);
+            var handlerMocks = Enumerable.Range(0, 2).Select(_ => new Mock<ITCPHandler>()).ToList();
+            foreach (var handlerMock in handlerMocks)
+            {
+                handlerMock.Setup(_ => _.Close());
+                tcpRelay.Handlers.Add(handlerMock.Object);
+            }
+            
+            tcpRelay.Stop();
+
+            VerifyAllHandlersClosed(handlerMocks);
+        }
+
+        private static void VerifyAllHandlersClosed(List<Mock<ITCPHandler>> handlerMocks)
+        {
+            foreach (var handlerMock in handlerMocks)
+            {
+                handlerMock.Verify(_ => _.Close(), Times.Exactly(1));
+            }
         }
 
         private static void VerifyHandleFailedDueToWrongSocketProtocolType(bool handleResult, Mock<SocketProxy> socketMoq)

@@ -77,30 +77,9 @@ namespace Shadowsocks.Controller.Service
             return true;
         }
 
-        private IEnumerable<ITCPHandler> GetTimeoutHandlersList(DateTime now)
-        {
-            return Handlers.Where(_ => IsHandlerTimeout(now, _)).ToList();
-        }
-
-        private static bool IsHandlerTimeout(DateTime now, ITCPHandler handler1)
-        {
-            return now - handler1.LastActivity > HandlerTimeout;
-        }
-
-        private bool NeedSweepTimeoutHandlers(DateTime now)
-        {
-            return now - _lastSweepTime > SweepPeriod;
-        }
-
-        private static bool NotCompatible(byte[] firstPacket, int length, SocketProxy socket)
-        {
-            return socket.ProtocolType != ProtocolType.Tcp
-                   || (length < 2 || firstPacket[0] != 5);
-        }
-
         public override void Stop()
         {
-            List<ITCPHandler> handlersToClose = new List<ITCPHandler>();
+            var handlersToClose = new List<ITCPHandler>();
             lock (Handlers)
             {
                 handlersToClose.AddRange(Handlers);
@@ -121,6 +100,27 @@ namespace Shadowsocks.Controller.Service
         public void UpdateLatency(Server server, TimeSpan latency)
         {
             _controller.UpdateLatency(server, latency);
+        }
+
+        private IEnumerable<ITCPHandler> GetTimeoutHandlersList(DateTime now)
+        {
+            return Handlers.Where(_ => IsHandlerTimeout(now, _)).ToList();
+        }
+
+        private static bool IsHandlerTimeout(DateTime now, ITCPHandler handler1)
+        {
+            return now - handler1.LastActivity > HandlerTimeout;
+        }
+
+        private bool NeedSweepTimeoutHandlers(DateTime now)
+        {
+            return now - _lastSweepTime > SweepPeriod;
+        }
+
+        private static bool NotCompatible(byte[] firstPacket, int length, SocketProxy socket)
+        {
+            return socket.ProtocolType != ProtocolType.Tcp
+                   || (length < 2 || firstPacket[0] != 5);
         }
     }
 }
