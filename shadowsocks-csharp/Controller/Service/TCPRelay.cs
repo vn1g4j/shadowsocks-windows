@@ -14,12 +14,17 @@ namespace Shadowsocks.Controller.Service
 
         public ISet<ITCPHandler> Handlers { get; set; }
 
+        internal Func<ShadowsocksController, Configuration, TCPRelay, Socket, ITCPHandler> TCPHandlerFactory { get; set; }
+
         public TCPRelay(ShadowsocksController controller, Configuration conf)
         {
             _controller = controller;
             _config = conf;
             Handlers = new HashSet<ITCPHandler>();
             _lastSweepTime = DateTime.Now;
+            TCPHandlerFactory =
+                (shadowsocksController, configuration, tcpRelay, socket) => new TCPHandler(shadowsocksController,
+                    configuration, tcpRelay, socket);
         }
 
         public override bool Handle(byte[] firstPacket, int length, SocketProxy socket, object state)
@@ -28,7 +33,7 @@ namespace Shadowsocks.Controller.Service
                 || (length < 2 || firstPacket[0] != 5))
                 return false;
             socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.NoDelay, true);
-            ITCPHandler handler = new TCPHandler(_controller, _config, this, socket);
+            ITCPHandler handler = TCPHandlerFactory(_controller, _config, this, socket);
 
             IList<ITCPHandler> handlersToClose = new List<ITCPHandler>();
             lock (Handlers)

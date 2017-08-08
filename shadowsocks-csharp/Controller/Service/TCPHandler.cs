@@ -13,7 +13,7 @@ using Shadowsocks.Util.Sockets;
 
 namespace Shadowsocks.Controller.Service
 {
-    internal interface ITCPHandler
+    public interface ITCPHandler
     {
         DateTime LastActivity { get; }
         void Start(byte[] firstPacket, int length);
