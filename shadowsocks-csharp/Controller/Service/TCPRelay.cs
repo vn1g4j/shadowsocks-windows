@@ -11,17 +11,29 @@ namespace Shadowsocks.Controller.Service
         private ShadowsocksController _controller;
         private DateTime _lastSweepTime;
         private Configuration _config;
+        internal static readonly TimeSpan SweepPeriod = TimeSpan.FromSeconds(1);
+        internal static readonly TimeSpan HandlerTimeout = TimeSpan.FromSeconds(900);
 
         public ISet<ITCPHandler> Handlers { get; set; }
 
         internal Func<ShadowsocksController, Configuration, TCPRelay, Socket, ITCPHandler> TCPHandlerFactory { get; set; }
 
-        public TCPRelay(ShadowsocksController controller, Configuration conf)
+        internal void SetLastSweepTime(DateTime lastSweepTime)
+        {
+            _lastSweepTime = lastSweepTime;
+        }
+
+        public TCPRelay(ShadowsocksController controller, Configuration conf) : this(controller, conf, DateTime.Now)
+        {
+            
+        }
+
+        internal TCPRelay(ShadowsocksController controller, Configuration conf, DateTime lastSweepTime)
         {
             _controller = controller;
             _config = conf;
             Handlers = new HashSet<ITCPHandler>();
-            _lastSweepTime = DateTime.Now;
+            _lastSweepTime = lastSweepTime;
             TCPHandlerFactory =
                 (shadowsocksController, configuration, tcpRelay, socket) => new TCPHandler(shadowsocksController,
                     configuration, tcpRelay, socket);
@@ -40,11 +52,11 @@ namespace Shadowsocks.Controller.Service
             {
                 Handlers.Add(handler);
                 DateTime now = DateTime.Now;
-                if (now - _lastSweepTime > TimeSpan.FromSeconds(1))
+                if (now - _lastSweepTime > SweepPeriod)
                 {
                     _lastSweepTime = now;
                     foreach (ITCPHandler handler1 in Handlers)
-                        if (now - handler1.LastActivity > TimeSpan.FromSeconds(900))
+                        if (now - handler1.LastActivity > HandlerTimeout)
                             handlersToClose.Add(handler1);
                 }
             }
