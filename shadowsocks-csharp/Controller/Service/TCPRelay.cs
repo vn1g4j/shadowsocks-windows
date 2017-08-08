@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Sockets;
 using Shadowsocks.Model;
 using Shadowsocks.Util.Sockets;
@@ -41,29 +42,28 @@ namespace Shadowsocks.Controller.Service
 
         public override bool Handle(byte[] firstPacket, int length, SocketProxy socket, object state)
         {
-            if (socket.ProtocolType != ProtocolType.Tcp
-                || (length < 2 || firstPacket[0] != 5))
+            if (NotCompatible(firstPacket, length, socket))
+            {
                 return false;
+            }
             socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.NoDelay, true);
-            ITCPHandler handler = TCPHandlerFactory(_controller, _config, this, socket);
+            var handler = TCPHandlerFactory(_controller, _config, this, socket);
 
-            IList<ITCPHandler> handlersToClose = new List<ITCPHandler>();
+            var handlersToClose = Enumerable.Empty<ITCPHandler>();
             lock (Handlers)
             {
                 Handlers.Add(handler);
-                DateTime now = DateTime.Now;
-                if (now - _lastSweepTime > SweepPeriod)
+                var now = DateTime.Now;
+                if (NeedSweepTimeoutHandlers(now))
                 {
                     _lastSweepTime = now;
-                    foreach (ITCPHandler handler1 in Handlers)
-                        if (now - handler1.LastActivity > HandlerTimeout)
-                            handlersToClose.Add(handler1);
+                    handlersToClose = GetTimeoutHandlersList(now);
                 }
             }
-            foreach (ITCPHandler handler1 in handlersToClose)
+            foreach (var timeoutHandler in handlersToClose)
             {
                 Logging.Debug("Closing timed out TCP connection.");
-                handler1.Close();
+                timeoutHandler.Close();
             }
 
             /*
@@ -75,6 +75,27 @@ namespace Shadowsocks.Controller.Service
             handler.Start(firstPacket, length);
 
             return true;
+        }
+
+        private IEnumerable<ITCPHandler> GetTimeoutHandlersList(DateTime now)
+        {
+            return Handlers.Where(_ => IsHandlerTimeout(now, _)).ToList();
+        }
+
+        private static bool IsHandlerTimeout(DateTime now, ITCPHandler handler1)
+        {
+            return now - handler1.LastActivity > HandlerTimeout;
+        }
+
+        private bool NeedSweepTimeoutHandlers(DateTime now)
+        {
+            return now - _lastSweepTime > SweepPeriod;
+        }
+
+        private static bool NotCompatible(byte[] firstPacket, int length, SocketProxy socket)
+        {
+            return socket.ProtocolType != ProtocolType.Tcp
+                   || (length < 2 || firstPacket[0] != 5);
         }
 
         public override void Stop()

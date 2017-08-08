@@ -10,8 +10,6 @@ namespace test
 {
     public class TCPRelayTest
     {
-        private static readonly byte[] FirstPacket = new byte[] {5, 0};
-
         [Fact]
         public void handle_should_return_false_if_protocol_not_compatible()
         {
@@ -19,8 +17,7 @@ namespace test
             socketMoq.Setup(_ => _.ProtocolType).Returns(() => ProtocolType.Raw);
             var tcpRelay = new TCPRelay(null, null);
             var handleResult = tcpRelay.Handle(FirstPacket, FirstPacket.Length, socketMoq.Object, null);
-            Assert.False(handleResult);
-            socketMoq.Verify(_=>_.ProtocolType, Times.Exactly(1));
+            VerifyHandleFailedDueToWrongSocketProtocolType(handleResult, socketMoq);
         }
 
         [Fact]
@@ -34,7 +31,7 @@ namespace test
 
             var result = tcpRelay.Handle(FirstPacket, FirstPacket.Length, socketMoq.Object, null);
 
-            tcpHanlderMoq.Verify(_=>_.Start(FirstPacket, FirstPacket.Length), Times.Exactly(1));
+            VerifyHandlerProperlyStarted(tcpRelay, tcpHanlderMoq);
         }
 
         [Fact]
@@ -50,7 +47,21 @@ namespace test
             tcpRelay.TCPHandlerFactory = (controller, configuration, arg3, arg4) => tcpHandlerMock.Object;
             tcpRelay.Handlers.Add(timeoutHandlerMock.Object);
             tcpRelay.Handle(FirstPacket, FirstPacket.Length, socketMoq.Object, null);
-            AssertProperlyHandleTimeoutHandlers(timeoutHandlerMock, tcpHandlerMock);
+            VerifyProperlyHandleTimeoutHandlers(timeoutHandlerMock, tcpHandlerMock);
+        }
+
+        private static void VerifyHandleFailedDueToWrongSocketProtocolType(bool handleResult, Mock<SocketProxy> socketMoq)
+        {
+            Assert.False(handleResult);
+            socketMoq.Verify(_ => _.ProtocolType, Times.Exactly(1));
+        }
+
+        private static readonly byte[] FirstPacket = new byte[] {5, 0};
+
+        private static void VerifyHandlerProperlyStarted(TCPRelay relay, Mock<ITCPHandler> tcpHanlderMoq)
+        {
+            Assert.True(relay.Handlers.Contains(tcpHanlderMoq.Object));
+            tcpHanlderMoq.Verify(_ => _.Start(FirstPacket, FirstPacket.Length), Times.Exactly(1));
         }
 
         private static Mock<ITCPHandler> CreateTimeoutHandlerMock()
@@ -61,18 +72,18 @@ namespace test
             return timeoutHandlerMock;
         }
 
-        private void AssertProperlyHandleTimeoutHandlers(Mock<ITCPHandler> timeoutHandlerMock, Mock<ITCPHandler> tcpHandlerMock)
+        private void VerifyProperlyHandleTimeoutHandlers(Mock<ITCPHandler> timeoutHandlerMock, Mock<ITCPHandler> tcpHandlerMock)
         {
-            HandlerClosed(timeoutHandlerMock);
-            HandlerNotClosed(tcpHandlerMock);
+            VerifyHandlerClosed(timeoutHandlerMock);
+            VerifyHandlerNotClosed(tcpHandlerMock);
         }
 
-        private void HandlerNotClosed(Mock<ITCPHandler> tcpHandlerMock)
+        private void VerifyHandlerNotClosed(Mock<ITCPHandler> tcpHandlerMock)
         {
             tcpHandlerMock.Verify(_=>_.Close(), Times.Never);
         }
 
-        private static void HandlerClosed(Mock<ITCPHandler> timeoutHandlerMock)
+        private static void VerifyHandlerClosed(Mock<ITCPHandler> timeoutHandlerMock)
         {
             timeoutHandlerMock.Verify(_ => _.Close(), Times.Exactly(1));
         }
