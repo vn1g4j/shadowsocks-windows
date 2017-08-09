@@ -75,6 +75,7 @@
     <Compile Include="EncryptionTest.cs" />
     <Compile Include="HotKeyTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TCPHandlerTest.cs" />
     <Compile Include="TCPRelayTest.cs" />
     <Compile Include="VersionCompareTest.cs" />
   </ItemGroup>

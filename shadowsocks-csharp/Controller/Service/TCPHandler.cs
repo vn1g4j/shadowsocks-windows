@@ -22,7 +22,7 @@ namespace Shadowsocks.Controller.Service
 
     internal class TCPHandler : ITCPHandler
     {
-        class AsyncSession
+        internal class AsyncSession
         {
             public IProxy Remote { get; }
 
@@ -63,6 +63,19 @@ namespace Shadowsocks.Controller.Service
         public const int BufferSize = RecvSize + (int)MaxChunkSize + 32 /* max salt len */;
 
         public DateTime LastActivity { get; private set; }
+
+        //this property is used to inject mock for unit test and NOT SUPPOSED TO BE USED FOR PRODUCTION PURPOSE
+        internal AsyncSession CurrentRemoteSession
+        {
+            set { _currentRemoteSession = value; }
+        }
+        //this property is used to inject mock for unit test and NOT SUPPOSED TO BE USED FOR PRODUCTION PURPOSE
+        internal IEncryptor Encryptor
+        {
+            set { _encryptor = value; }
+        }
+
+        internal bool Closed => _closed;
 
         private ShadowsocksController _controller;
         private Configuration _config;
