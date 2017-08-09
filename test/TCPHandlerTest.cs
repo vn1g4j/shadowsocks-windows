@@ -24,7 +24,7 @@ namespace test
             var sut = new TCPHandler(null, config, null, socketMock.Object);
             sut.Start(firstPacket, firstPacket.Length);
 
-            var rejectResponse = new byte[] {0, 91};
+            var rejectResponse = TCPHandler.HandshakeRejectResponseHead;
             socketMock.Verify(_ => _.BeginSend(rejectResponse, 0, rejectResponse.Length, SocketFlags.None,
                 It.IsAny<AsyncCallback>(), null), Times.Once());
         }
@@ -54,8 +54,7 @@ namespace test
 
             var encryptorMock = new Mock<IEncryptor>(MockBehavior.Loose);
             
-            var config = new Configuration { proxy = new ProxyConfig { proxyTimeout = 0 } };
-            config.configs = new List<Server>();
+            var config = CreateMockConfiguration();
             var relay = new TCPRelay(null, null);
             var sut = new TCPHandler(null, config, relay, socketMock.Object){CurrentRemoteSession = asyncSession};
             sut.Encryptor = encryptorMock.Object;
@@ -63,6 +62,31 @@ namespace test
             sut.Close();
 
             AssertResourcesProperlyCleaned(sut, relay, socketMock, remoteMock, encryptorMock);
+        }
+
+        private static Configuration CreateMockConfiguration()
+        {
+            var config = new Configuration {proxy = new ProxyConfig {proxyTimeout = 0}};
+            config.configs = new List<Server>();
+            return config;
+        }
+
+        [Fact]
+        public void close_should_ignore_closed_handler()
+        {
+            var socketMock = new Mock<SocketProxy>(MockBehavior.Loose, (Socket)null);
+            var config = CreateMockConfiguration();
+            var relay = new TCPRelay(null, null);
+            var sut = new TCPHandler(null, config, relay, socketMock.Object);
+            sut.Closed = true;
+            sut.Close();
+
+            VerifyHandlerDoNotCloseSocket(socketMock);
+        }
+
+        private static void VerifyHandlerDoNotCloseSocket(Mock<SocketProxy> socketMock)
+        {
+            socketMock.Verify(_ => _.Close(), Times.Never);
         }
 
         private static void VerifyHandlerClosed(TCPHandler sut, Mock<SocketProxy> socketMock)

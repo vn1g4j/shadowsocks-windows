@@ -102,6 +102,14 @@ namespace Shadowsocks.Controller.Service
             _controller.UpdateLatency(server, latency);
         }
 
+        public void UnRegisterTCPHandler(ITCPHandler handler)
+        {
+            lock (Handlers)
+            {
+                Handlers.Remove(handler);
+            }
+        }
+
         private IEnumerable<ITCPHandler> GetTimeoutHandlersList(DateTime now)
         {
             return Handlers.Where(_ => IsHandlerTimeout(now, _)).ToList();

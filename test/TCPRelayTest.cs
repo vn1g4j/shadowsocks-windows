@@ -12,6 +12,8 @@ namespace test
 {
     public class TCPRelayTest
     {
+        private static readonly byte[] FirstPacket = new byte[] { TCPHandler.Socks5Version, 0 };
+
         [Fact]
         public void handle_should_return_false_if_protocol_not_compatible()
         {
@@ -81,8 +83,6 @@ namespace test
             Assert.False(handleResult);
             socketMoq.Verify(_ => _.ProtocolType, Times.Exactly(1));
         }
-
-        private static readonly byte[] FirstPacket = new byte[] {5, 0};
 
         private static void VerifyHandlerProperlyStarted(TCPRelay relay, Mock<ITCPHandler> tcpHanlderMoq)
         {
