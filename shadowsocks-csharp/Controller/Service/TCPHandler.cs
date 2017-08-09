@@ -67,7 +67,7 @@ namespace Shadowsocks.Controller.Service
         private ShadowsocksController _controller;
         private Configuration _config;
         private TCPRelay _tcprelay;
-        private Socket _connection;
+        private SocketProxy _connection;
 
         private IEncryptor _encryptor;
         private Server _server;
@@ -117,7 +117,7 @@ namespace Shadowsocks.Controller.Service
 
         private EndPoint _destEndPoint = null;
 
-        public TCPHandler(ShadowsocksController controller, Configuration config, TCPRelay tcprelay, Socket socket)
+        public TCPHandler(ShadowsocksController controller, Configuration config, TCPRelay tcprelay, SocketProxy socket)
         {
             _controller = controller;
             _config = config;
