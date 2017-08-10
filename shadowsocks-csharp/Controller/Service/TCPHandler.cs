@@ -286,9 +286,12 @@ namespace Shadowsocks.Controller.Service
             return _firstPacket[0] != Socks5Version;
         }
 
-        private void HandshakeSendCallback(IAsyncResult ar)
+        internal void HandshakeSendCallback(IAsyncResult ar)
         {
-            if (_closed) return;
+            if (_closed)
+            {
+                return;
+            }
             try
             {
                 _connection.EndSend(ar);
