@@ -78,6 +78,66 @@ namespace test
             VerifyHandlerProperlyBeginReceiveCommand(asyncResult, sut);
         }
 
+        [Fact]
+        public void establish_tcp_connection()
+        {
+            var asyncResultMock = new Mock<IAsyncResult>();
+            var asyncResult = asyncResultMock.Object;
+
+            _socketMock.Setup(_ => _.EndReceive(asyncResult)).Returns(5);
+
+            var sut = new TCPHandler(null, _configuration, null, _socketMock.Object);
+            sut.ConnetionRecvBuffer[1] = TCPHandler.CMD_CONNECT;
+            sut.HandshakeReceive2Callback(asyncResult);
+            
+            VerifySendBackEstablishedResponse(sut);
+        }
+
+        [Fact]
+        public void establish_should_close_socket_if_client_send_establish_packet_length_less_than_5()
+        {
+            var asyncResultMock = new Mock<IAsyncResult>();
+            var asyncResult = asyncResultMock.Object;
+            _socketMock.Setup(_ => _.EndReceive(asyncResult)).Returns(4);
+            var relay = new TCPRelay(null, null);
+            var sut = new TCPHandler(null, _configuration, relay, _socketMock.Object);
+            sut.ConnetionRecvBuffer[1] = TCPHandler.CMD_CONNECT;
+            relay.Handlers.Add(sut);
+
+            sut.HandshakeReceive2Callback(asyncResult);
+
+            VerifySocketClosed();
+        }
+
+        private void VerifySocketClosed()
+        {
+            _socketMock.Verify(_ => _.Close());
+        }
+
+        [Fact]
+        public void establish_should_close_socket_if_command_unsupported()
+        {
+            var asyncResultMock = new Mock<IAsyncResult>();
+            var asyncResult = asyncResultMock.Object;
+            _socketMock.Setup(_ => _.EndReceive(asyncResult)).Returns(5);
+            var relay = new TCPRelay(null, null);
+            var sut = new TCPHandler(null, _configuration, relay, _socketMock.Object);
+            sut.ConnetionRecvBuffer[1] = TCPHandler.CMD_CONNECT-1;
+            relay.Handlers.Add(sut);
+
+            sut.HandshakeReceive2Callback(asyncResult);
+
+            VerifySocketClosed();
+        }
+
+        private void VerifySendBackEstablishedResponse(TCPHandler sut)
+        {
+            var expectedResponse = new byte[] { TCPHandler.Socks5Version, TCPHandler.SuccessREP, TCPHandler.Reserve, TCPHandler.IpV4, 0, 0, 0, 0, 0, 0 };
+
+            _socketMock.Verify(_ => _.BeginSend(expectedResponse, 0, expectedResponse.Length, SocketFlags.None,
+                new AsyncCallback(sut.ResponseCallback), null));
+        }
+
         private void VerifyHanderSendVersionPacketAndContinueByHandshakeSendCallback(TCPHandler sut)
         {
             var expectedSendBack = TCPHandler.Socks5HandshakeResponseHead;

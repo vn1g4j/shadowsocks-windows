@@ -74,11 +74,16 @@ namespace Shadowsocks.Controller.Service
         {
             set { _encryptor = value; }
         }
-
+        //this property is used to inject mock for unit test and NOT SUPPOSED TO BE USED FOR PRODUCTION PURPOSE
         internal bool Closed
         {
             get { return _closed; }
             set { _closed = value; }
+        }
+        //this property is used to inject mock for unit test and NOT SUPPOSED TO BE USED FOR PRODUCTION PURPOSE
+        internal byte[] ConnetionRecvBuffer
+        {
+            get { return _connetionRecvBuffer; }
         }
 
         private ShadowsocksController _controller;
@@ -98,12 +103,16 @@ namespace Shadowsocks.Controller.Service
         private byte[] _firstPacket;
         private int _firstPacketLength;
 
-        private const int CMD_CONNECT = 0x01;
-        private const int CMD_UDP_ASSOC = 0x03;
+        internal const int CMD_CONNECT = 0x01;
+        internal const int CMD_UDP_ASSOC = 0x03;
 
         public const int Socks5Version = 5;
+        public const int NoAuthRequired = 0;
+        public const int SuccessREP = 0;
+        public const int Reserve = 0;
+        public const int IpV4 = 1;
 
-        internal static readonly byte[] Socks5HandshakeResponseHead = new byte[] { Socks5Version, 0};
+        internal static readonly byte[] Socks5HandshakeResponseHead = new byte[] { Socks5Version, NoAuthRequired };
         internal static readonly byte[] HandshakeRejectResponseHead = new byte[] {0, 91};
 
 
@@ -265,8 +274,7 @@ namespace Shadowsocks.Controller.Service
                             response = HandshakeRejectResponseHead;
                             Logging.Error("socks 5 protocol error");
                         }
-                        _connection.BeginSend(response, 0, response.Length, SocketFlags.None,
-                            HandshakeSendCallback, null);
+                        CompleteHandshake(response);
                     }
                     else
                     {
@@ -279,6 +287,12 @@ namespace Shadowsocks.Controller.Service
                     Close();
                 }
             }
+        }
+
+        private void CompleteHandshake(byte[] response)
+        {
+            _connection.BeginSend(response, 0, response.Length, SocketFlags.None,
+                HandshakeSendCallback, null);
         }
 
         private bool NotSocks5()
@@ -332,7 +346,7 @@ namespace Shadowsocks.Controller.Service
                     {
                         if (_command == CMD_CONNECT)
                         {
-                            byte[] response = { 5, 0, 0, 1, 0, 0, 0, 0, 0, 0 };
+                            byte[] response = { Socks5Version, SuccessREP, Reserve, IpV4, 0, 0, 0, 0, 0, 0 };
                             _connection.BeginSend(response, 0, response.Length, SocketFlags.None,
                                 ResponseCallback, null);
                         }
@@ -356,7 +370,7 @@ namespace Shadowsocks.Controller.Service
             }
         }
 
-        private void ResponseCallback(IAsyncResult ar)
+        internal void ResponseCallback(IAsyncResult ar)
         {
             try
             {
