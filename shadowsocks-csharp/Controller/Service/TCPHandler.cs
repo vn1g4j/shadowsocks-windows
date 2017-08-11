@@ -314,7 +314,7 @@ namespace Shadowsocks.Controller.Service
             }
         }
 
-        private void HandshakeReceive2Callback(IAsyncResult ar)
+        internal void HandshakeReceive2Callback(IAsyncResult ar)
         {
             if (_closed) return;
             try
