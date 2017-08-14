@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Sockets;
 using Moq;
-using Shadowsocks.Controller;
 using Shadowsocks.Controller.Service;
 using Shadowsocks.Util.Sockets;
 using Xunit;
@@ -13,44 +12,48 @@ namespace test
     public class TCPRelayTest
     {
         private static readonly byte[] FirstPacket = new byte[] { TCPHandler.Socks5Version, 0 };
+        private Mock<SocketProxy> _socketMoq = CreateNewSocketProxyMoq();
+        private Mock<ITCPHandler> _tcpHanlderMoq = new Mock<ITCPHandler>();
+
+        private TCPRelay _sut;
+
+        public TCPRelayTest()
+        {
+            _sut = new TCPRelay(null, null)
+            {
+                TCPHandlerFactory = (controller, configuration, relay, socket) => _tcpHanlderMoq.Object
+            };
+        }
 
         [Fact]
         public void handle_should_return_false_if_protocol_not_compatible()
         {
-            var socketMoq = new Mock<SocketProxy>(MockBehavior.Strict, (Socket)null);
-            socketMoq.Setup(_ => _.ProtocolType).Returns(() => ProtocolType.Raw);
-            var tcpRelay = new TCPRelay(null, null);
-            var handleResult = tcpRelay.Handle(FirstPacket, FirstPacket.Length, socketMoq.Object, null);
-            VerifyHandleFailedDueToWrongSocketProtocolType(handleResult, socketMoq);
+            _socketMoq.Setup(_ => _.ProtocolType).Returns(() => ProtocolType.Raw);
+            var handleResult = _sut.Handle(FirstPacket, FirstPacket.Length, _socketMoq.Object, null);
+            VerifyHandleFailedDueToWrongSocketProtocolType(handleResult, _socketMoq);
         }
 
         [Fact]
         public void handle_should_start_a_tcp_handler()
         {
-            var tcpHanlderMoq = new Mock<ITCPHandler>();
-            var socketMoq = CreateNewSocketProxyMoq();
+            var result = _sut.Handle(FirstPacket, FirstPacket.Length, _socketMoq.Object, null);
 
-            var tcpRelay = new TCPRelay(null, null);
-            tcpRelay.TCPHandlerFactory = (controller, configuration, relay, socket) => tcpHanlderMoq.Object;
-
-            var result = tcpRelay.Handle(FirstPacket, FirstPacket.Length, socketMoq.Object, null);
-
-            VerifyHandlerProperlyStarted(tcpRelay, tcpHanlderMoq);
+            VerifyHandlerProperlyStarted(_sut, _tcpHanlderMoq);
         }
 
         [Fact]
         public void handle_should_only_close_timeout_handlers()
         {
             var timeoutHandlerMock = CreateTimeoutHandlerMock();
-            var socketMoq = CreateNewSocketProxyMoq();
-
             var tcpRelay = new TCPRelay(null, null, DefinitelyTimeoutSweepTime());
             var tcpHandlerMock = new Mock<ITCPHandler>();
             tcpHandlerMock.Setup(_ => _.Start(FirstPacket, FirstPacket.Length));
             tcpHandlerMock.Setup(_ => _.LastActivity).Returns(DateTime.Now);
             tcpRelay.TCPHandlerFactory = (controller, configuration, arg3, arg4) => tcpHandlerMock.Object;
             tcpRelay.Handlers.Add(timeoutHandlerMock.Object);
-            tcpRelay.Handle(FirstPacket, FirstPacket.Length, socketMoq.Object, null);
+
+            tcpRelay.Handle(FirstPacket, FirstPacket.Length, _socketMoq.Object, null);
+
             VerifyProperlyHandleTimeoutHandlers(timeoutHandlerMock, tcpHandlerMock);
         }
 

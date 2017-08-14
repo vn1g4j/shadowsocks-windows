@@ -13,15 +13,29 @@ namespace test
 {
     public class TCPHandlerTest
     {
+        private const int ValidEstablishConnectionPacketMinLength = 5;
         private Mock<SocketProxy> _socketMock = new Mock<SocketProxy>(MockBehavior.Loose, (Socket)null);
         private Configuration _configuration = CreateMockConfiguration();
+        private TCPRelay _tcpRelay = new TCPRelay(null, null);
+        private Mock<IProxy> _remoteMock = new Mock<IProxy>(MockBehavior.Loose);
+        private TCPHandler.AsyncSession _asyncSession;
+        private Mock<IEncryptor> _encryptorMock = new Mock<IEncryptor>(MockBehavior.Loose);
+        private IAsyncResult _asyncResult = (new Mock<IAsyncResult>()).Object;
+        private TCPHandler _sut;
+
+        public TCPHandlerTest()
+        {
+            _asyncSession = new TCPHandler.AsyncSession(_remoteMock.Object);
+            _sut = new TCPHandler(null, _configuration, _tcpRelay, _socketMock.Object) { CurrentRemoteSession = _asyncSession };
+            _sut.Encryptor = _encryptorMock.Object;
+            _tcpRelay.Handlers.Add(_sut);
+        }
 
         [Fact]
         public void handshake_should_reject_if_protocol_is_not_sock5()
         {
-            byte[] firstPacket = new byte[]{ 4, 0 };
-            var sut = new TCPHandler(null, _configuration, null, _socketMock.Object);
-            sut.Start(firstPacket, firstPacket.Length);
+            byte[] invalidFirstPacket = new byte[]{ TCPHandler.Socks5Version - 1, 0 };
+            _sut.Start(invalidFirstPacket, invalidFirstPacket.Length);
 
             var rejectResponse = TCPHandler.HandshakeRejectResponseHead;
             _socketMock.Verify(_ => _.BeginSend(rejectResponse, 0, rejectResponse.Length, SocketFlags.None,
@@ -31,80 +45,55 @@ namespace test
         [Fact]
         public void handshake_should_close_handler_if_packet_length_less_than_2()
         {
-            byte[] invalidPacket = new byte[] {4};
-            var relay = new TCPRelay(null, null);
-            var sut = new TCPHandler(null, _configuration, relay, _socketMock.Object);
-            sut.Start(invalidPacket, invalidPacket.Length);
+            byte[] invalidPacket = new byte[] { TCPHandler.Socks5Version };
+            
+            _sut.Start(invalidPacket, invalidPacket.Length);
 
-            VerifyHandlerClosed(sut, _socketMock);
+            VerifyHandlerClosed(_sut, _socketMock);
         }
 
         [Fact]
         public void handshake_should_begin_send_version_packet_and_continue_by_handshakeSendCallback_if_first_packet_is_valid()
         {
             byte[] validPacket = new byte[] { TCPHandler.Socks5Version, 0 };
-            var relay = new TCPRelay(null, null);
-            var sut = new TCPHandler(null, _configuration, relay, _socketMock.Object);
-            sut.Start(validPacket, validPacket.Length);
-            VerifyHanderSendVersionPacketAndContinueByHandshakeSendCallback(sut);
+            _sut.Start(validPacket, validPacket.Length);
+            VerifyHanderSendVersionPacketAndContinueByHandshakeSendCallback(_sut);
         }
 
         [Fact]
         public void close_should_properly_clean_resources()
         {
-            var remoteMock = new Mock<IProxy>(MockBehavior.Loose);
-            var asyncSession = new TCPHandler.AsyncSession(remoteMock.Object);
-            var encryptorMock = new Mock<IEncryptor>(MockBehavior.Loose);
+            _sut.Close();
 
-            var relay = new TCPRelay(null, null);
-            var sut = new TCPHandler(null, _configuration, relay, _socketMock.Object){CurrentRemoteSession = asyncSession};
-            sut.Encryptor = encryptorMock.Object;
-            relay.Handlers.Add(sut);
-            sut.Close();
-
-            AssertResourcesProperlyCleaned(sut, relay, _socketMock, remoteMock, encryptorMock);
+            AssertResourcesProperlyCleaned(_sut, _tcpRelay, _socketMock, _remoteMock, _encryptorMock);
         }
 
         [Fact]
         public void handshakeSendCallback_should_begin_receive_following_command()
         {
-            var asyncResultMock = new Mock<IAsyncResult>();
-            var asyncResult = asyncResultMock.Object;
+            _sut.HandshakeSendCallback(_asyncResult);
 
-            var sut = new TCPHandler(null, _configuration, null, _socketMock.Object);
-            
-            sut.HandshakeSendCallback(asyncResult);
-
-            VerifyHandlerProperlyBeginReceiveCommand(asyncResult, sut);
+            VerifyHandlerProperlyBeginReceiveCommand(_asyncResult, _sut);
         }
 
         [Fact]
         public void establish_tcp_connection()
         {
-            var asyncResultMock = new Mock<IAsyncResult>();
-            var asyncResult = asyncResultMock.Object;
-
-            _socketMock.Setup(_ => _.EndReceive(asyncResult)).Returns(5);
-
-            var sut = new TCPHandler(null, _configuration, null, _socketMock.Object);
-            sut.ConnetionRecvBuffer[1] = TCPHandler.CMD_CONNECT;
-            sut.HandshakeReceive2Callback(asyncResult);
+            _socketMock.Setup(_ => _.EndReceive(_asyncResult)).Returns(ValidEstablishConnectionPacketMinLength);
             
-            VerifySendBackEstablishedResponse(sut);
+            _sut.ConnetionRecvBuffer[1] = TCPHandler.CMD_CONNECT;
+            _sut.HandshakeReceive2Callback(_asyncResult);
+            
+            VerifySendBackEstablishedResponse(_sut);
         }
 
         [Fact]
         public void establish_should_close_socket_if_client_send_establish_packet_length_less_than_5()
         {
-            var asyncResultMock = new Mock<IAsyncResult>();
-            var asyncResult = asyncResultMock.Object;
-            _socketMock.Setup(_ => _.EndReceive(asyncResult)).Returns(4);
-            var relay = new TCPRelay(null, null);
-            var sut = new TCPHandler(null, _configuration, relay, _socketMock.Object);
-            sut.ConnetionRecvBuffer[1] = TCPHandler.CMD_CONNECT;
-            relay.Handlers.Add(sut);
+            _socketMock.Setup(_ => _.EndReceive(_asyncResult)).Returns(ValidEstablishConnectionPacketMinLength - 1);
+            _sut.ConnetionRecvBuffer[1] = TCPHandler.CMD_CONNECT;
 
-            sut.HandshakeReceive2Callback(asyncResult);
+            _sut.HandshakeReceive2Callback(_asyncResult);
 
             VerifySocketClosed();
         }
@@ -117,17 +106,26 @@ namespace test
         [Fact]
         public void establish_should_close_socket_if_command_unsupported()
         {
-            var asyncResultMock = new Mock<IAsyncResult>();
-            var asyncResult = asyncResultMock.Object;
-            _socketMock.Setup(_ => _.EndReceive(asyncResult)).Returns(5);
-            var relay = new TCPRelay(null, null);
-            var sut = new TCPHandler(null, _configuration, relay, _socketMock.Object);
-            sut.ConnetionRecvBuffer[1] = TCPHandler.CMD_CONNECT-1;
-            relay.Handlers.Add(sut);
+            _socketMock.Setup(_ => _.EndReceive(_asyncResult)).Returns(ValidEstablishConnectionPacketMinLength);
+            var unsupportedCmd = (byte)(TCPHandler.CMD_CONNECT - 1);
+            _sut.ConnetionRecvBuffer[1] = unsupportedCmd;
 
-            sut.HandshakeReceive2Callback(asyncResult);
+            _sut.HandshakeReceive2Callback(_asyncResult);
 
             VerifySocketClosed();
+        }
+
+        [Fact]
+        public void close_should_ignore_closed_handler()
+        {
+            var socketMock = new Mock<SocketProxy>(MockBehavior.Loose, (Socket)null);
+            var config = CreateMockConfiguration();
+            var relay = new TCPRelay(null, null);
+            var sut = new TCPHandler(null, config, relay, socketMock.Object);
+            sut.Closed = true;
+            sut.Close();
+
+            VerifyHandlerDoNotCloseSocket(socketMock);
         }
 
         private void VerifySendBackEstablishedResponse(TCPHandler sut)
@@ -154,22 +152,9 @@ namespace test
 
         private static Configuration CreateMockConfiguration()
         {
-            var config = new Configuration {proxy = new ProxyConfig {proxyTimeout = 0}};
+            var config = new Configuration { proxy = new ProxyConfig { proxyTimeout = 0 } };
             config.configs = new List<Server>();
             return config;
-        }
-
-        [Fact]
-        public void close_should_ignore_closed_handler()
-        {
-            var socketMock = new Mock<SocketProxy>(MockBehavior.Loose, (Socket)null);
-            var config = CreateMockConfiguration();
-            var relay = new TCPRelay(null, null);
-            var sut = new TCPHandler(null, config, relay, socketMock.Object);
-            sut.Closed = true;
-            sut.Close();
-
-            VerifyHandlerDoNotCloseSocket(socketMock);
         }
 
         private static void VerifyHandlerDoNotCloseSocket(Mock<SocketProxy> socketMock)
