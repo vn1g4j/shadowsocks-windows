@@ -44,17 +44,17 @@ namespace test
         [Fact]
         public void handle_should_only_close_timeout_handlers()
         {
-            var timeoutHandlerMock = CreateTimeoutHandlerMock();
-            var tcpRelay = new TCPRelay(null, null, DefinitelyTimeoutSweepTime());
-            var tcpHandlerMock = new Mock<ITCPHandler>();
-            tcpHandlerMock.Setup(_ => _.Start(FirstPacket, FirstPacket.Length));
-            tcpHandlerMock.Setup(_ => _.LastActivity).Returns(DateTime.Now);
-            tcpRelay.TCPHandlerFactory = (controller, configuration, arg3, arg4) => tcpHandlerMock.Object;
-            tcpRelay.Handlers.Add(timeoutHandlerMock.Object);
+            _tcpHanlderMoq = CreateTimeoutHandlerMock();
+            _sut = new TCPRelay(null, null, DefinitelyTimeoutSweepTime());
+            var newCreatedTcpHandlerMock = new Mock<ITCPHandler>();
+            newCreatedTcpHandlerMock.Setup(_ => _.Start(FirstPacket, FirstPacket.Length));
+            newCreatedTcpHandlerMock.Setup(_ => _.LastActivity).Returns(DateTime.Now);
+            _sut.TCPHandlerFactory = (controller, configuration, arg3, arg4) => newCreatedTcpHandlerMock.Object;
+            _sut.Handlers.Add(_tcpHanlderMoq.Object);
 
-            tcpRelay.Handle(FirstPacket, FirstPacket.Length, _socketMoq.Object, null);
+            _sut.Handle(FirstPacket, FirstPacket.Length, _socketMoq.Object, null);
 
-            VerifyProperlyHandleTimeoutHandlers(timeoutHandlerMock, tcpHandlerMock);
+            VerifyProperlyHandleTimeoutHandlers(_tcpHanlderMoq, newCreatedTcpHandlerMock);
         }
 
         [Fact]
