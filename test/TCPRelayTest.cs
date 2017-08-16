@@ -60,17 +60,22 @@ namespace test
         [Fact]
         public void close_all_handlers_when_stop_relay()
         {
-            var tcpRelay = new TCPRelay(null, null);
-            var handlerMocks = Enumerable.Range(0, 2).Select(_ => new Mock<ITCPHandler>()).ToList();
-            foreach (var handlerMock in handlerMocks)
+            var handlerWaitToBeClosedMocks = FillRelayWithSomeHandlersWaitToBeClosed();
+
+            _sut.Stop();
+
+            VerifyAllHandlersClosed(handlerWaitToBeClosedMocks);
+        }
+
+        private List<Mock<ITCPHandler>> FillRelayWithSomeHandlersWaitToBeClosed()
+        {
+            var handlerWaitToBeClosedMocks = Enumerable.Range(0, 2).Select(_ => new Mock<ITCPHandler>()).ToList();
+            foreach (var handlerMock in handlerWaitToBeClosedMocks)
             {
                 handlerMock.Setup(_ => _.Close());
-                tcpRelay.Handlers.Add(handlerMock.Object);
+                _sut.Handlers.Add(handlerMock.Object);
             }
-            
-            tcpRelay.Stop();
-
-            VerifyAllHandlersClosed(handlerMocks);
+            return handlerWaitToBeClosedMocks;
         }
 
         private static void VerifyAllHandlersClosed(List<Mock<ITCPHandler>> handlerMocks)
