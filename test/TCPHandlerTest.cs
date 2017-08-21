@@ -22,11 +22,13 @@ namespace test
         private Mock<IEncryptor> _encryptorMock = new Mock<IEncryptor>(MockBehavior.Loose);
         private IAsyncResult _asyncResult = (new Mock<IAsyncResult>()).Object;
         private TCPHandler _sut;
+        private const int ExpectedDomainLength = 16;
 
         public TCPHandlerTest()
         {
             _asyncSession = new TCPHandler.AsyncSession(_remoteMock.Object);
             _sut = new TCPHandler(null, _configuration, _tcpRelay, _socketMock.Object) { CurrentRemoteSession = _asyncSession };
+            _sut.ConnetionRecvBuffer[4] = ExpectedDomainLength;
             _sut.Encryptor = _encryptorMock.Object;
             _tcpRelay.Handlers.Add(_sut);
         }
@@ -128,12 +130,54 @@ namespace test
             VerifyHandlerDoNotCloseSocket(socketMock);
         }
 
+        [Fact]
+        public void read_address_should_erase_first_3_bytes()
+        {
+            byte[] buffer = new byte[3 + EncryptorBase.ADDR_ATYP_LEN + 1];
+            for(int i = 0; i < buffer.Length; i++)
+            {
+                buffer[i] = (byte) i;
+            }
+            Array.Copy(buffer, _sut.ConnetionRecvBuffer, buffer.Length);
+
+            _sut.ReadAddress(0, null);
+
+            AssertFirstThreeBytesErased(buffer);
+        }
+
+        [Theory]
+        [InlineData(EncryptorBase.ATYP_IPv4, TCPHandler.IPV4Length + EncryptorBase.ADDR_PORT_LEN - 1)]
+        [InlineData(EncryptorBase.ATYP_DOMAIN, ExpectedDomainLength + EncryptorBase.ADDR_PORT_LEN)]
+        [InlineData(EncryptorBase.ATYP_IPv6, TCPHandler.IPV6Length + EncryptorBase.ADDR_PORT_LEN - 1)]
+        public void read_address_should_map_bytes_remain_corretly(int addressType, int bytesRemain)
+        {
+            _sut.ConnetionRecvBuffer[3] = (byte)addressType;
+            _sut.ReadAddress(null);
+            VerifySocketBeginReceiveExpectedBytes(bytesRemain);
+        }
+
+        private void VerifySocketBeginReceiveExpectedBytes(int bytesRemain)
+        {
+            _socketMock.Verify(_ => _.BeginReceive(It.IsAny<byte[]>(), 2, It.IsAny<int>(), SocketFlags.None,
+                It.IsAny<AsyncCallback>(),
+                new object[] {bytesRemain, null}));
+        }
+
+
+        private void AssertFirstThreeBytesErased(byte[] buffer)
+        {
+            for (int i = 0; i < buffer.Length - 3; i++)
+            {
+                Assert.Equal(buffer[i + 3], _sut.ConnetionRecvBuffer[i]);
+            }
+        }
+
         private void VerifySendBackEstablishedResponse(TCPHandler sut)
         {
             var expectedResponse = new byte[] { TCPHandler.Socks5Version, TCPHandler.SuccessREP, TCPHandler.Reserve, TCPHandler.IpV4, 0, 0, 0, 0, 0, 0 };
 
             _socketMock.Verify(_ => _.BeginSend(expectedResponse, 0, expectedResponse.Length, SocketFlags.None,
-                new AsyncCallback(sut.ResponseCallback), null));
+                new AsyncCallback(sut.ResponseConnectCallback), null));
         }
 
         private void VerifyHanderSendVersionPacketAndContinueByHandshakeSendCallback(TCPHandler sut)

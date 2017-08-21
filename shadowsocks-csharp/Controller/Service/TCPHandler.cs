@@ -111,6 +111,8 @@ namespace Shadowsocks.Controller.Service
         public const int SuccessREP = 0;
         public const int Reserve = 0;
         public const int IpV4 = 1;
+        public const int IPV4Length = 4;
+        public const int IPV6Length = 16;
 
         internal static readonly byte[] Socks5HandshakeResponseHead = new byte[] { Socks5Version, NoAuthRequired };
         internal static readonly byte[] HandshakeRejectResponseHead = new byte[] {0, 91};
@@ -348,7 +350,7 @@ namespace Shadowsocks.Controller.Service
                         {
                             byte[] response = { Socks5Version, SuccessREP, Reserve, IpV4, 0, 0, 0, 0, 0, 0 };
                             _connection.BeginSend(response, 0, response.Length, SocketFlags.None,
-                                ResponseCallback, null);
+                                ResponseConnectCallback, null);
                         }
                         else if (_command == CMD_UDP_ASSOC)
                         {
@@ -370,7 +372,7 @@ namespace Shadowsocks.Controller.Service
             }
         }
 
-        internal void ResponseCallback(IAsyncResult ar)
+        internal void ResponseConnectCallback(IAsyncResult ar)
         {
             try
             {
@@ -385,30 +387,32 @@ namespace Shadowsocks.Controller.Service
             }
         }
 
-        private void ReadAddress(Action onSuccess)
+        internal void ReadAddress(Action onSuccess)
         {
-            int atyp = _connetionRecvBuffer[3];
+            int addressType = _connetionRecvBuffer[3];
+            int bytesRemain = 0;
 
-            switch (atyp)
+            switch (addressType)
             {
-                case EncryptorBase.ATYP_IPv4: // IPv4 address, 4 bytes
-                    ReadAddress(4 + EncryptorBase.ADDR_PORT_LEN - 1, onSuccess);
+                case EncryptorBase.ATYP_IPv4:
+                    bytesRemain = IPV4Length + EncryptorBase.ADDR_PORT_LEN - 1;
                     break;
-                case EncryptorBase.ATYP_DOMAIN: // domain name, length + str
+                case EncryptorBase.ATYP_DOMAIN:
                     int len = _connetionRecvBuffer[4];
-                    ReadAddress(len + EncryptorBase.ADDR_PORT_LEN, onSuccess);
+                    bytesRemain = len + EncryptorBase.ADDR_PORT_LEN;
                     break;
-                case EncryptorBase.ATYP_IPv6: // IPv6 address, 16 bytes
-                    ReadAddress(16 + EncryptorBase.ADDR_PORT_LEN - 1, onSuccess);
+                case EncryptorBase.ATYP_IPv6: 
+                    bytesRemain = IPV6Length + EncryptorBase.ADDR_PORT_LEN - 1;
                     break;
                 default:
-                    Logging.Debug("Unsupported ATYP=" + atyp);
+                    Logging.Debug("Unsupported ATYP=" + addressType);
                     Close();
                     break;
             }
+            ReadAddress(bytesRemain, onSuccess);
         }
 
-        private void ReadAddress(int bytesRemain, Action onSuccess)
+        internal void ReadAddress(int bytesRemain, Action onSuccess)
         {
             // drop [ VER | CMD |  RSV  ]
             Array.Copy(_connetionRecvBuffer, 3, _connetionRecvBuffer, 0, EncryptorBase.ADDR_ATYP_LEN + 1);
@@ -418,7 +422,7 @@ namespace Shadowsocks.Controller.Service
                 new object[] { bytesRemain, onSuccess });
         }
 
-        private void OnAddressFullyRead(IAsyncResult ar)
+        internal void OnAddressFullyRead(IAsyncResult ar)
         {
             if (_closed) return;
             try
